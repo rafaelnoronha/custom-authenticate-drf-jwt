@@ -30,6 +30,138 @@ def update_last_login_custom(sender, user, **kwargs):
     user.save(update_fields=[date_last_login_field, time_last_login_field])
 
 
+class GerenteGrupo(models.Manager):
+    """
+    The manager for the auth's Group model.
+    """
+    # use_in_migrations = True
+
+    # def get_by_natural_key(self, name):
+    #     return self.get(gr_nome=name)
+
+    def get_queryset(self):
+        return super().get_queryset()
+
+    
+class Grupo(Group):
+    gr_nome = models.CharField(
+        verbose_name='Grupo',
+        max_length=150,
+        unique=True
+    )
+
+    gr_permissoes = models.ManyToManyField(
+        Permission,
+        verbose_name='Permissões',
+        blank=True,
+    )
+
+    name = None
+    permissions = None
+
+    objects = GerenteGrupo()
+
+    class Meta:
+        verbose_name = 'grupo'
+        verbose_name_plural = 'grupos'
+        proxy = True
+
+    def __str__(self):
+        return self.gr_nome
+
+    def natural_key(self):
+        return (self.gr_nome,)
+
+
+# class PermissoesMixin(models.Model):
+#     """
+#     Add the fields and methods necessary to support the Group and Permission
+#     models using the ModelBackend.
+#     """
+#     is_superuser = models.BooleanField(
+#         verbose_name='super usuário',
+#         default=False,
+#         help_text=(
+#             'Designates that this user has all permissions without '
+#             'explicitly assigning them.'
+#         ),
+#     )
+#     groups = models.ManyToManyField(
+#         Grupo,
+#         verbose_name='Grupos',
+#         blank=True,
+#         help_text=(
+#             'The groups this user belongs to. A user will get all permissions '
+#             'granted to each of their groups.'
+#         ),
+#         related_name="user_set",
+#         related_query_name="user",
+#     )
+#     user_permissions = models.ManyToManyField(
+#         Permission,
+#         verbose_name='Permissoes do Usuário',
+#         blank=True,
+#         help_text='Especifica as permissões para este usuário',
+#         related_name="user_set",
+#         related_query_name="user",
+#     )
+
+#     class Meta:
+#         abstract = True
+
+#     def get_user_permissions(self, obj=None):
+#         """
+#         Return a list of permission strings that this user has directly.
+#         Query all available auth backends. If an object is passed in,
+#         return only permissions matching this object.
+#         """
+#         return _user_get_permissions(self, obj, 'user')
+
+#     def get_group_permissions(self, obj=None):
+#         """
+#         Return a list of permission strings that this user has through their
+#         groups. Query all available auth backends. If an object is passed in,
+#         return only permissions matching this object.
+#         """
+#         return _user_get_permissions(self, obj, 'group')
+
+#     def get_all_permissions(self, obj=None):
+#         return _user_get_permissions(self, obj, 'all')
+
+#     def has_perm(self, perm, obj=None):
+#         """
+#         Return True if the user has the specified permission. Query all
+#         available auth backends, but return immediately if any backend returns
+#         True. Thus, a user who has permission from a single auth backend is
+#         assumed to have permission in general. If an object is provided, check
+#         permissions for that object.
+#         """
+#         # Active superusers have all permissions.
+#         if self.is_active and self.is_superuser:
+#             return True
+
+#         # Otherwise we need to check the backends.
+#         return _user_has_perm(self, perm, obj)
+
+#     def has_perms(self, perm_list, obj=None):
+#         """
+#         Return True if the user has each of the specified permissions. If
+#         object is passed, check if the user has all required perms for it.
+#         """
+#         return all(self.has_perm(perm, obj) for perm in perm_list)
+
+#     def has_module_perms(self, app_label):
+#         """
+#         Return True if the user has any permissions in the given app label.
+#         Use similar logic as has_perm(), above.
+#         """
+#         # Active superusers have all permissions.
+#         if self.is_active and self.is_superuser:
+#             return True
+
+#         return _user_has_module_perms(self, app_label)
+
+
 class GerenteUsuario(BaseUserManager):
     def _create_user(self, sr_usuario, sr_senha, **extra_fields):
         if not sr_usuario:
@@ -50,7 +182,7 @@ class GerenteUsuario(BaseUserManager):
         return user
 
 
-class Usuario(AbstractBaseUser, PermissionsMixin): # Herdade do meu Mixin de Permissões personalixado
+class Usuario(AbstractBaseUser, Permission):
     sr_usuario = models.CharField(
         max_length=30,
         unique=True,
@@ -154,186 +286,58 @@ class Usuario(AbstractBaseUser, PermissionsMixin): # Herdade do meu Mixin de Per
         ).hexdigest()
 
 
-class GerenteGrupo(models.Manager):
-    """
-    The manager for the auth's Group model.
-    """
-    use_in_migrations = True
+# class PermissionManager(models.Manager):
+#     use_in_migrations = True
 
-    def get_by_natural_key(self, name):
-        return self.get(gr_nome=name)
-
-    
-class Grupo(Group):
-    gr_nome = models.CharField(
-        verbose_name='Grupo',
-        max_length=150,
-        unique=True
-    )
-
-    gr_permissoes = models.ManyToManyField(
-        Permission,
-        verbose_name='Permissões',
-        blank=True,
-    )
-
-    name = None
-    permissions = None
-
-    objects = GerenteGrupo()
-
-    class Meta:
-        verbose_name = 'grupo'
-        verbose_name_plural = 'grupos'
-
-    def __str__(self):
-        return self.gr_nome
-
-    def natural_key(self):
-        return (self.gr_nome,)
+#     def get_by_natural_key(self, codename, app_label, model):
+#         return self.get(
+#             codename=codename,
+#             content_type=ContentType.objects.db_manager(self.db).get_by_natural_key(app_label, model),
+#         )
 
 
-class PermissionManager(models.Manager):
-    use_in_migrations = True
+# class Permissoes(models.Model):
+#     """
+#     The permissions system provides a way to assign permissions to specific
+#     users and groups of users.
 
-    def get_by_natural_key(self, codename, app_label, model):
-        return self.get(
-            codename=codename,
-            content_type=ContentType.objects.db_manager(self.db).get_by_natural_key(app_label, model),
-        )
+#     The permission system is used by the Django admin site, but may also be
+#     useful in your own code. The Django admin site uses permissions as follows:
 
+#         - The "add" permission limits the user's ability to view the "add" form
+#           and add an object.
+#         - The "change" permission limits a user's ability to view the change
+#           list, view the "change" form and change an object.
+#         - The "delete" permission limits the ability to delete an object.
+#         - The "view" permission limits the ability to view an object.
 
-class Permissoes(models.Model):
-    """
-    The permissions system provides a way to assign permissions to specific
-    users and groups of users.
+#     Permissions are set globally per type of object, not per specific object
+#     instance. It is possible to say "Mary may change news stories," but it's
+#     not currently possible to say "Mary may change news stories, but only the
+#     ones she created herself" or "Mary may only change news stories that have a
+#     certain status or publication date."
 
-    The permission system is used by the Django admin site, but may also be
-    useful in your own code. The Django admin site uses permissions as follows:
+#     The permissions listed above are automatically created for each model.
+#     """
+#     name = models.CharField(verbose_name='Nome', max_length=255)
+#     content_type = models.ForeignKey(
+#         ContentType,
+#         models.CASCADE,
+#         verbose_name='Tipo de Conteúdo',
+#     )
+#     codename = models.CharField(verbose_name='Codnome', max_length=100)
 
-        - The "add" permission limits the user's ability to view the "add" form
-          and add an object.
-        - The "change" permission limits a user's ability to view the change
-          list, view the "change" form and change an object.
-        - The "delete" permission limits the ability to delete an object.
-        - The "view" permission limits the ability to view an object.
+#     objects = PermissionManager()
 
-    Permissions are set globally per type of object, not per specific object
-    instance. It is possible to say "Mary may change news stories," but it's
-    not currently possible to say "Mary may change news stories, but only the
-    ones she created herself" or "Mary may only change news stories that have a
-    certain status or publication date."
+#     class Meta:
+#         verbose_name = 'permissao'
+#         verbose_name_plural = 'permissoes'
+#         unique_together = [['content_type', 'codename']]
+#         ordering = ['content_type__app_label', 'content_type__model', 'codename']
 
-    The permissions listed above are automatically created for each model.
-    """
-    name = models.CharField(verbose_name='Nome', max_length=255)
-    content_type = models.ForeignKey(
-        ContentType,
-        models.CASCADE,
-        verbose_name='Tipo de Conteúdo',
-    )
-    codename = models.CharField(verbose_name='Codnome', max_length=100)
+#     def __str__(self):
+#         return '%s | %s' % (self.content_type, self.name)
 
-    objects = PermissionManager()
-
-    class Meta:
-        verbose_name = 'permissao'
-        verbose_name_plural = 'permissoes'
-        unique_together = [['content_type', 'codename']]
-        ordering = ['content_type__app_label', 'content_type__model', 'codename']
-
-    def __str__(self):
-        return '%s | %s' % (self.content_type, self.name)
-
-    def natural_key(self):
-        return (self.codename,) + self.content_type.natural_key()
-    natural_key.dependencies = ['contenttypes.contenttype']
-
-
-class PermissionsMixin(models.Model):
-    """
-    Add the fields and methods necessary to support the Group and Permission
-    models using the ModelBackend.
-    """
-    is_superuser = models.BooleanField(
-        verbose_name='super usuário',
-        default=False,
-        help_text=(
-            'Designates that this user has all permissions without '
-            'explicitly assigning them.'
-        ),
-    )
-    groups = models.ManyToManyField(
-        Grupo,
-        verbose_name='Grupos',
-        blank=True,
-        help_text=(
-            'The groups this user belongs to. A user will get all permissions '
-            'granted to each of their groups.'
-        ),
-        related_name="user_set",
-        related_query_name="user",
-    )
-    user_permissions = models.ManyToManyField(
-        Permissoes,
-        verbose_name='Permissoes do Usuário',
-        blank=True,
-        help_text='Especifica as permissões para este usuário',
-        related_name="user_set",
-        related_query_name="user",
-    )
-
-    class Meta:
-        abstract = True
-
-    def get_user_permissions(self, obj=None):
-        """
-        Return a list of permission strings that this user has directly.
-        Query all available auth backends. If an object is passed in,
-        return only permissions matching this object.
-        """
-        return _user_get_permissions(self, obj, 'user')
-
-    def get_group_permissions(self, obj=None):
-        """
-        Return a list of permission strings that this user has through their
-        groups. Query all available auth backends. If an object is passed in,
-        return only permissions matching this object.
-        """
-        return _user_get_permissions(self, obj, 'group')
-
-    def get_all_permissions(self, obj=None):
-        return _user_get_permissions(self, obj, 'all')
-
-    def has_perm(self, perm, obj=None):
-        """
-        Return True if the user has the specified permission. Query all
-        available auth backends, but return immediately if any backend returns
-        True. Thus, a user who has permission from a single auth backend is
-        assumed to have permission in general. If an object is provided, check
-        permissions for that object.
-        """
-        # Active superusers have all permissions.
-        if self.is_active and self.is_superuser:
-            return True
-
-        # Otherwise we need to check the backends.
-        return _user_has_perm(self, perm, obj)
-
-    def has_perms(self, perm_list, obj=None):
-        """
-        Return True if the user has each of the specified permissions. If
-        object is passed, check if the user has all required perms for it.
-        """
-        return all(self.has_perm(perm, obj) for perm in perm_list)
-
-    def has_module_perms(self, app_label):
-        """
-        Return True if the user has any permissions in the given app label.
-        Use similar logic as has_perm(), above.
-        """
-        # Active superusers have all permissions.
-        if self.is_active and self.is_superuser:
-            return True
-
-        return _user_has_module_perms(self, app_label)
+#     def natural_key(self):
+#         return (self.codename,) + self.content_type.natural_key()
+#     natural_key.dependencies = ['contenttypes.contenttype']
