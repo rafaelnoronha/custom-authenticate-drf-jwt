@@ -30,58 +30,104 @@ def update_last_login_custom(sender, user, **kwargs):
     user.save(update_fields=[date_last_login_field, time_last_login_field])
 
 
-class GerenteGrupo(models.Manager):
+class GerenteUsuario(BaseUserManager):
+    def _create_user(self, sr_usuario, sr_senha, **extra_fields):
+        if not sr_usuario:
+            raise ValueError(('The given username must be set'))
+
+        user = self.model(sr_usuario=sr_usuario, sr_senha=sr_senha, **extra_fields)
+
+        user.set_password(sr_senha)
+        user.save(using=self._db)
+        return user
+
+    def create_user(self, sr_usuario, sr_senha, **extra_fields):
+        return self._create_user(sr_usuario, sr_senha, **extra_fields)
+
+    def create_superuser(self, sr_usuario, sr_senha, **extra_fields):
+        campos_adicionais = extra_fields
+        # campos_adicionais.update({'sr_'})
+
+        user = self._create_user(sr_usuario, sr_senha, **extra_fields)
+        user.save(using=self._db)
+        return user
+
+# ------------------------------------------------------------------------------------------------------------------------
+class GroupManager(models.Manager):
     """
     The manager for the auth's Group model.
     """
-    # use_in_migrations = True
+    use_in_migrations = True
 
-    # def get_by_natural_key(self, name):
-    #     return self.get(gr_nome=name)
+    def get_by_natural_key(self, name):
+        return self.get(gr_nome=name)
 
-    def get_queryset(self):
-        return super().get_queryset()
 
-    
-class Grupo(Group):
-    gr_nome = models.CharField(
-        verbose_name='Grupo',
-        max_length=150,
-        unique=True
+class Grupo(models.Model):
+    """
+    Groups are a generic way of categorizing users to apply permissions, or
+    some other label, to those users. A user can belong to any number of
+    groups.
+
+    A user in a group automatically has all the permissions granted to that
+    group. For example, if the group 'Site editors' has the permission
+    can_edit_home_page, any user in that group will have that permission.
+
+    Beyond permissions, groups are a convenient way to categorize users to
+    apply some label, or extended functionality, to them. For example, you
+    could create a group 'Special users', and you could write code that would
+    do special things to those users -- such as giving them access to a
+    members-only portion of your site, or sending them members-only email
+    messages.
+    """
+    gr_nome = models.CharField(verbose_name='Nome', max_length=150, unique=True)
+
+    permissoes = models.ManyToManyField(
+        Permission,
+        verbose_name='Permisão',
+        blank=True,
+        through='GrupoPermissao',
+        through_fields=('gp_grupo', 'gp_permissao')
     )
 
-    name = None
-    permissions = None
-
-    objects = GerenteGrupo()
+    objects = GroupManager()
 
     class Meta:
-        verbose_name = 'grupo'
-        verbose_name_plural = 'grupos'
+        verbose_name = 'Grupo'
+        verbose_name_plural = 'Grupos'
+        db_table = 'th_grupo'
 
     def __str__(self):
-        return self.gr_nome
+        return self.name
 
     def natural_key(self):
-        return (self.gr_nome,)
+        return (self.name,)
 
 
-class PermissoesMixin(models.Model):
+class GrupoUsuario(models.Model):
+    gs_usuario = models.ForeignKey('Usuario', on_delete=models.CASCADE)
+    gs_grupo = models.ForeignKey('Grupo', on_delete=models.CASCADE)
+
+    class Meta:
+        verbose_name = 'Grupo de Usuário'
+        verbose_name_plural = 'Grupos de Usuários'
+        db_table = 'th_grupo_usuario'
+
+
+class PermissionsCustomMixin(models.Model):
     """
     Add the fields and methods necessary to support the Group and Permission
     models using the ModelBackend.
     """
     sr_administrador = models.BooleanField(
-        verbose_name='super usuário',
+        verbose_name='Administrador',
         default=False,
-        help_text=(
-            'Designates that this user has all permissions without '
-            'explicitly assigning them.'
-        ),
+        help_text='Informa se o usuário é um administrador',
     )
-    sr_grupos = models.ManyToManyField(
+
+    grupos = models.ManyToManyField(
         Grupo,
-        verbose_name='Grupos',
+        verbose_name='Grupo',
         blank=True,
         help_text=(
             'The groups this user belongs to. A user will get all permissions '
@@ -89,12 +135,15 @@ class PermissoesMixin(models.Model):
         ),
         related_name="user_set",
         related_query_name="user",
+        through='GrupoUsuario',
+        through_fields=('gs_usuario', 'gs_grupo')
     )
-    sr_permissoes = models.ManyToManyField(
+
+    permissoes = models.ManyToManyField(
         Permission,
-        verbose_name='Permissoes do Usuário',
+        verbose_name='Permissão',
         blank=True,
-        help_text='Especifica as permissões para este usuário',
+        help_text='Specific permissions for this user.',
         related_name="user_set",
         related_query_name="user",
     )
@@ -130,7 +179,7 @@ class PermissoesMixin(models.Model):
         permissions for that object.
         """
         # Active superusers have all permissions.
-        if self.is_active and self.is_superuser:
+        if self.ativo and self.sr_administrador:
             return True
 
         # Otherwise we need to check the backends.
@@ -149,33 +198,26 @@ class PermissoesMixin(models.Model):
         Use similar logic as has_perm(), above.
         """
         # Active superusers have all permissions.
-        if self.is_active and self.is_superuser:
+        if self.ativo and self.sr_administrador:
             return True
 
         return _user_has_module_perms(self, app_label)
 
 
-class GerenteUsuario(BaseUserManager):
-    def _create_user(self, sr_usuario, sr_senha, **extra_fields):
-        if not sr_usuario:
-            raise ValueError(('The given username must be set'))
+class GrupoPermissao(models.Model):
+    gp_grupo = models.ForeignKey('Grupo', on_delete=models.CASCADE)
+    gp_permissao = models.ForeignKey(Permission, on_delete=models.CASCADE)
 
-        user = self.model(sr_usuario=sr_usuario, sr_senha=sr_senha, **extra_fields)
+    class Meta:
+        verbose_name = 'Grupo de Permissoes'
+        verbose_name_plural = 'Grupos de Permissões'
+        db_table = 'th_grupo_permisao'
 
-        user.set_password(sr_senha)
-        user.save(using=self._db)
-        return user
-
-    def create_user(self, sr_usuario, sr_senha, **extra_fields):
-        return self._create_user(sr_usuario, sr_senha, **extra_fields)
-
-    def create_superuser(self, sr_usuario, sr_senha, **extra_fields):
-        user = self._create_user(sr_usuario, sr_senha, **extra_fields)
-        user.save(using=self._db)
-        return user
+# -------------------------------------------------------------------------------------------------------------------------
 
 
-class Usuario(AbstractBaseUser, PermissionsMixin):
+
+class Usuario(AbstractBaseUser, PermissionsCustomMixin):
     sr_usuario = models.CharField(
         max_length=30,
         unique=True,
@@ -220,7 +262,7 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
     REQUIRED_FIELDS = ['sr_senha',]
 
     class Meta:
-        db_table = 'usuario'
+        db_table = 'th_usuario'
         verbose_name = 'Usuário'
         verbose_name_plural = 'Usuários'
         ordering = ['-id',]
@@ -277,60 +319,3 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
             # algorithm='sha256',
             algorithm=settings.DEFAULT_HASHING_ALGORITHM,
         ).hexdigest()
-
-
-# class PermissionManager(models.Manager):
-#     use_in_migrations = True
-
-#     def get_by_natural_key(self, codename, app_label, model):
-#         return self.get(
-#             codename=codename,
-#             content_type=ContentType.objects.db_manager(self.db).get_by_natural_key(app_label, model),
-#         )
-
-
-# class Permissoes(models.Model):
-#     """
-#     The permissions system provides a way to assign permissions to specific
-#     users and groups of users.
-
-#     The permission system is used by the Django admin site, but may also be
-#     useful in your own code. The Django admin site uses permissions as follows:
-
-#         - The "add" permission limits the user's ability to view the "add" form
-#           and add an object.
-#         - The "change" permission limits a user's ability to view the change
-#           list, view the "change" form and change an object.
-#         - The "delete" permission limits the ability to delete an object.
-#         - The "view" permission limits the ability to view an object.
-
-#     Permissions are set globally per type of object, not per specific object
-#     instance. It is possible to say "Mary may change news stories," but it's
-#     not currently possible to say "Mary may change news stories, but only the
-#     ones she created herself" or "Mary may only change news stories that have a
-#     certain status or publication date."
-
-#     The permissions listed above are automatically created for each model.
-#     """
-#     name = models.CharField(verbose_name='Nome', max_length=255)
-#     content_type = models.ForeignKey(
-#         ContentType,
-#         models.CASCADE,
-#         verbose_name='Tipo de Conteúdo',
-#     )
-#     codename = models.CharField(verbose_name='Codnome', max_length=100)
-
-#     objects = PermissionManager()
-
-#     class Meta:
-#         verbose_name = 'permissao'
-#         verbose_name_plural = 'permissoes'
-#         unique_together = [['content_type', 'codename']]
-#         ordering = ['content_type__app_label', 'content_type__model', 'codename']
-
-#     def __str__(self):
-#         return '%s | %s' % (self.content_type, self.name)
-
-#     def natural_key(self):
-#         return (self.codename,) + self.content_type.natural_key()
-#     natural_key.dependencies = ['contenttypes.contenttype']
